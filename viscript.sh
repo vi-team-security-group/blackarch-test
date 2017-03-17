@@ -1,7 +1,7 @@
 #!/bin/bash
 cat <<EOF
 *****************
- Vi Script
+Vi Script
 Update Metasploit
 This script was created by Mastervi
 *****************  
