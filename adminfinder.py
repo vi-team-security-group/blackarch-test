@@ -2,7 +2,7 @@
 # This was written for educational purpose only. Use it at your own risk.
 # Author will be not responsible for any damage!
 # !!! Special greetz for my friends Vi Team !!!
-# !!! Special thanx for Vi team and rsauron who inspired me !!! 
+#  
 ###########################################################################
 
 #################################################################### 
